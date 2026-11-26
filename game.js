@@ -21,7 +21,64 @@ $("logout").onclick=async()=>{await db.auth.signOut();user=null;profile=null;cha
 $("save").onclick=async()=>{let c=$("kanji").value.trim().slice(0,1);if(!c){alertUser("漢字を1文字入力してください");return}let s=calc(c),{data,error}=await db.from("profiles").upsert({id:user.id,username:profile?.username||user.email,kanji:c,stats:s},{onConflict:"id"}).eq("id",user.id).select().single();if(error)alertUser(error.message);else{profile=data;character={kanji:c,stats:s};alertUser("保存しました")}};
 async function ranking(){if(!db)return;let {data,error}=await db.from("profiles").select("username,points,kanji").order("points",{ascending:false}).limit(30);if(error){$("ranklist").textContent="ランキング取得失敗";return}$("ranklist").innerHTML=(data||[]).map((r,i)=>`<div class="rank"><span>${i+1}. ${esc(r.username)} ${esc(r.kanji||"")}</span><b>${r.points||0} P</b></div>`).join("")||"まだランキングがありません"}
 $("match").onclick=async()=>{if(!user||!character){alertUser("ログインし、漢字を保存してください");return}if(!checkConfig())return;$("match").disabled=true;show("cancel");$("matchstatus").textContent="相手を探しています…";let {data,error}=await db.rpc("find_or_create_match",{p_kanji:character.kanji,p_stats:character.stats});if(error){$("matchstatus").textContent=error.message;$("match").disabled=false;hide("cancel");return}queueRoom=data;let id=data.room_id;queueSub=db.channel("queue-"+id).on("postgres_changes",{event:"*",schema:"public",table:"match_queue",filter:`room_id=eq.${id}`},ev=>{if(ev.new?.status==="matched"||ev.new?.player2_id)beginMatch(ev.new)}).subscribe();let tries=0;searchPoll=setInterval(async()=>{let q=await db.from("match_queue").select("*").eq("room_id",id).maybeSingle();if(q.data&&(q.data.status==="matched"||q.data.player2_id)){clearInterval(searchPoll);beginMatch(q.data)}if(++tries>120){clearInterval(searchPoll);$("matchstatus").textContent="検索時間切れ。再試行してください";cancelQueue()}},1300)};
-function beginMatch(r){clearInterval(searchPoll);queueRoom=r;$("matchstatus").textContent="対戦相手が見つかりました！";$("match").textContent="試合開始";$("match").disabled=false;$("match").onclick=async()=>{let res=await db.rpc("start_match_room",{p_room_id:r.room_id});if(res.error)console.warn(res.error);startBattle(r)}}
+functionfunction beginMatch(r){
+  clearInterval(searchPoll);
+  queueRoom=r;
+  $("matchstatus").textContent="対戦相手が見つかりました！";
+  $("match").textContent="試合開始";
+  $("match").disabled=false;
+
+  if(queueRoom._startHandlerSet)return;
+  queueRoom._startHandlerSet=true;
+
+  $("match").onclick=async()=>{
+    $("match").disabled=true;
+    $("matchstatus").textContent="開始準備を送信中…";
+
+    let res=await db.rpc("start_match_room",{p_room_id:r.room_id});
+
+    if(res.error){
+      $("matchstatus").textContent="エラー："+res.error.message;
+      $("match").disabled=false;
+      return;
+    }
+
+    $("matchstatus").textContent="相手の開始待ち…";
+
+    let countdownStarted=false;
+
+    searchPoll=setInterval(async()=>{
+      let q=await db.from("match_queue")
+        .select("*")
+        .eq("room_id",r.room_id)
+        .maybeSingle();
+
+      if(q.error){
+        $("matchstatus").textContent="接続確認中…";
+        return;
+      }
+
+      if(q.data?.status==="started"&&!countdownStarted){
+        countdownStarted=true;
+        clearInterval(searchPoll);
+
+        let count=3;
+        $("matchstatus").textContent="試合開始まで "+count;
+
+        let timer=setInterval(()=>{
+          count--;
+
+          if(count>0){
+            $("matchstatus").textContent="試合開始まで "+count;
+          }else{
+            clearInterval(timer);
+            startBattle(q.data);
+          }
+        },1000);
+      }
+    },700);
+  };
+}
 async function cancelQueue(){clearInterval(searchPoll);if(queueRoom)await db.rpc("cancel_match_room",{p_room_id:queueRoom.room_id});if(queueSub){db.removeChannel(queueSub);queueSub=null}queueRoom=null;$("match").textContent="対戦相手を探す";$("match").onclick=queueAgain;$("match").disabled=false;hide("cancel");$("matchstatus").textContent="キャンセルしました"}
 async function queueAgain(){ $("match").onclick=queueMatchHandler; queueMatchHandler()}
 const queueMatchHandler=$("match").onclick;
