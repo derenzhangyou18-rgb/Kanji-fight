@@ -40,7 +40,32 @@ function render(){ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle="#
 function fighter(p,k,enemy){ctx.save();ctx.translate(p.x,p.y);ctx.fillStyle="#0005";ctx.beginPath();ctx.ellipse(0,24,25,8,0,0,Math.PI*2);ctx.fill();ctx.fillStyle=enemy?"#ff767d":"#8296ff";ctx.strokeStyle=enemy?"#ffc1c5":"#c9d2ff";ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(-22,-25,44,50,9);ctx.fill();ctx.stroke();ctx.fillStyle="#111521";ctx.font="bold 30px serif";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(k,0,0);if(p.guard){ctx.strokeStyle="#63c9ff";ctx.lineWidth=4;ctx.beginPath();ctx.arc(0,0,36,0,Math.PI*2);ctx.stroke()}if(Date.now()<p.attackUntil){ctx.strokeStyle="#ffce86";ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(p.face*22,0);ctx.lineTo(p.face*58,-10);ctx.stroke()}ctx.restore()}
 function hud(){$("myhp").style.width=me.hp+"%";$("enemyhp").style.width=op.hp+"%";$("myhpnum").textContent=me.hp+" / 100";$("enemyhpnum").textContent=op.hp+" / 100"}
 async function finish(win){if(finished)return;finished=true;playing=false;keys.clear();guardOn(false);$("battlemsg").textContent=win?"勝利！ +50P":"敗北 -40P";let {error}=await db.rpc("finish_match",{p_room_id:queueRoom.room_id,p_won:win});if(error)console.warn("score update failed",error);await profileLoad();$("points").textContent=profile?.points||0;ranking()}
-$("leave").onclick=()=>{if(playing&&!finished)finish(false);playing=false;finished=true;keys.clear();if(battleSub){db.removeChannel(battleSub);battleSub=null}hide("battle");show("lobby");ranking()};
-if(configured){db.auth.getSession().then(({data})=>{if(data.session){user=data.session.user;profileLoad().then(loggedIn)}});db.auth.onAuthStateChange((_,session)=>{if(session&&!user){user=session.user;profileLoad().then(loggedIn)}})}else console.info("Supabase configuration is needed. See README.");
-preview();render();
+function returnHome(){
+  playing=false;
+  finished=true;
+  keys.clear();
+  guardOn(false);
+  if(battleSub){
+    db.removeChannel(battleSub);
+    battleSub=null;
+  }
+  const overlay=document.getElementById("resultOverlay");
+  if(overlay)overlay.remove();
+  hide("battle");
+  show("lobby");
+  $("match").textContent="対戦相手を探す";
+  $("match").disabled=false;
+  $("match").onclick=queueAgain;
+  hide("cancel");
+  $("matchstatus").textContent="準備完了";
+  ranking();
+}
+
+$("leave").onclick=()=>{
+  if(playing&&!finished){
+    finish(false);
+  }else{
+    returnHome();
+  }
+};
 })();
