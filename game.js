@@ -1,6 +1,6 @@
 (() => {
 const $=id=>document.getElementById(id), configured=window.SUPABASE_URL?.startsWith("https://")&&!window.SUPABASE_URL.includes("PASTE_")&&window.SUPABASE_ANON_KEY&&!window.SUPABASE_ANON_KEY.includes("PASTE_");
-const db=configured?supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY):null;
+const db=configured?supabase.createClient(window.SUPABASE_URL,window.SUPABASE_ANON_KEY):null;
 let user=null,profile=null,character=null,termsAccepted=false,queueRoom=null,queueSub=null,battleSub=null,searchPoll=null,opponentState=null,countdownTimer=null,resultTimer=null,countdownStarted=false;
 const canvas=$("arena"),ctx=canvas.getContext("2d"), keys=new Set();
 let me={x:180,y:250,hp:100,face:1,guard:false,attackUntil:0,cooldown:0},op={x:710,y:250,hp:100,face:-1,guard:false,attackUntil:0},playing=false,finished=false,lastSync=0;
